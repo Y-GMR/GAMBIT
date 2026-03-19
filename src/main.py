@@ -29,6 +29,12 @@ def int_cbrt(n):
         return -int_cbrt(-n)
     if n == 0:
         return 0
+    try:
+        from gmpy2 import iroot
+        root, exact = iroot(n, 3)
+        return int(root) if exact else None
+    except ImportError:
+        pass
     x = int(round(n ** (1/3)))
     x = max(x, 1)
     while True:
