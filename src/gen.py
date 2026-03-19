@@ -137,6 +137,11 @@ def scenario_fermat():
     c = encrypt(m, e, n)
     print_output(n, e, c, msg)
 
+    m_check = pow(c, d, n)
+    h = hex(m_check)[2:]
+    if len(h) % 2: h = '0' + h
+    print(f"  [*] Sanity check decrypt: {bytes.fromhex(h).decode(errors='replace')}")
+
 # ============================== WIENER ==============================
 
 def scenario_wiener():
@@ -147,6 +152,9 @@ def scenario_wiener():
     q = get_int("  q = ")
     if not is_prime(p) or not is_prime(q):
         print("  [!] Warning: p or q may not be prime")
+    if p == q:
+        print("  [!] p and q must be different primes")
+        return
 
     n = p * q
     phi = (p-1)*(q-1)

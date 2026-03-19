@@ -17,6 +17,7 @@ def decrypt(p, q, e, c, N, label=""):
         m = pow(c, d, N)
         h = hex(m)[2:]
         if len(h) % 2: h = '0' + h
+        print(f"[*] Raw hex: {h}")
         result = bytes.fromhex(h).decode(errors='replace')
         print(f"[+] DECRYPTED ({label}): {result}")
         return result
@@ -173,7 +174,16 @@ def attack_wiener(N, e, c):
         q = (b - sq) // 2
         if p * q == N:
             print(f"[!] Wiener worked: d={d}")
-            return decrypt(p, q, e, c, N, "Wiener")
+            m = pow(c, d, N)
+            h = hex(m)[2:]
+            if len(h) % 2: h = '0' + h
+            try:
+                result = bytes.fromhex(h).decode(errors='replace')
+                print(f"[+] DECRYPTED (Wiener): {result}")
+                return result
+            except Exception as ex:
+                print(f"[-] Decrypt failed (Wiener): {ex}")
+                return None
     print("[-] Wiener failed, skip")
     return None
 
@@ -211,7 +221,7 @@ def get_inputs():
 def main():
     while True:
         print("\n" + "=" * 50)
-        print("RSA CTF SOLVER")
+        print("GAMBIT")
         print("=" * 50)
         print("1. Run all attacks (auto)")
         print("2. Decrypt with known p and q")
