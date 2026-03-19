@@ -12,8 +12,8 @@ gambit/
 ├── README.md
 ├── .gitignore
 └── src/
-    ├── rsa_ctf.py   — RSA solver, runs all common attacks automatically
-    └── rsa_gen.py   — RSA test case generator, generates values for each attack type
+    ├── main.py   — RSA solver, runs all common attacks automatically
+    └── gen.py   — RSA test case generator, generates values for each attack type
 ```
 
 ---
@@ -45,7 +45,7 @@ source ~/.bashrc
 
 ## Usage
 
-### `rsa_ctf.py` — Solver
+### `main.py` — Solver
 
 Run and follow the menu:
 
