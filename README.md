@@ -12,8 +12,8 @@ gambit/
 ├── README.md
 ├── .gitignore
 └── src/
-    ├── rsa_ctf.py   — RSA solver, runs all common attacks automatically
-    └── rsa_gen.py   — RSA test case generator, generates values for each attack type
+    ├── main.py   — RSA solver, runs all common attacks automatically
+    └── gen.py    — RSA test case generator, generates values for each attack type
 ```
 
 ---
@@ -47,16 +47,14 @@ source ~/.bashrc
 
 ### `main.py` — Solver
 
-Run and follow the menu:
-
 ```bash
 python3 src/main.py
 ```
 
 **Options:**
-1. Run all attacks automatically — paste N, e, c and it tries everything in order
+1. Run all attacks automatically — enter N, e, c and it tries everything in order
 2. Decrypt with known p and q — for when factordb gives you the factors
-3. Factordb hint — prints N formatted and ready to paste into factordb.com
+3. Factordb hint — prints N ready to paste into factordb.com
 
 **Attack order:**
 1. Even prime (`p=2`, checks if N is even)
@@ -67,11 +65,10 @@ python3 src/main.py
 6. Fermat factorization (p and q are close)
 7. Wiener's attack (small d, huge e)
 8. Fallback: factordb lookup hint
+
 ---
 
 ### `gen.py` — Test Case Generator
-
-Generates valid RSA values for each attack scenario so you can test the solver or RsaCtfTool:
 
 ```bash
 python3 src/gen.py
@@ -94,7 +91,7 @@ Each scenario validates your inputs, warns if the attack won't work, and prints 
 
 ```
 given N, e, c
-    └─ python3 src/main.py   → option 1 (auto)
+    └─ python3 src/main.py → option 1 (auto)
            └─ no result?
                   └─ RsaCtfTool -n N -e e --decrypt c --attack all
                          └─ no result?
@@ -106,10 +103,12 @@ given N, e, c
 ## Notes
 
 - **Even prime attack**: RsaCtfTool rejects even N values outright — use `main.py` for this case
-- **Wiener's attack**: requires `gmpy2`. Skipped automatically if not installed
+- **Wiener's attack**: requires `gmpy2`, skipped automatically if not installed
 - **Fermat**: capped at 1,000,000 iterations by default — increase `max_iter` in the function if needed
-- **Message size**: when using `gen.py`, your message must be smaller than N as an integer
-- **Primality**: `gen.py` uses Miller-Rabin for primality checks — fast on large numbers
+- **Hastads**: only works when `m^3 >= n` (message wraps around modulus) — if `m^3 < n`, small e cube root handles it with one ciphertext instead
+- **Common modulus**: requires two ciphertexts of the same message under the same N but different e values where `gcd(e1, e2) = 1`
+- **Message size**: when using `gen.py`, your message as an integer must be smaller than N
+- **Primality**: `gen.py` uses Miller-Rabin — fast on large numbers, warns if input may not be prime
 
 ---
 
@@ -118,6 +117,6 @@ given N, e, c
 | Tool | Purpose |
 |---|---|
 | [RsaCtfTool](https://github.com/RsaCtfTool/RsaCtfTool) | Heavy fallback, tries 50+ attacks |
-| [factordb.com](https://factordb.com) | Online factor database, often has CTF N values |
+| [factordb.com](https://factordb.com) | Online factor database, often has CTF N values pre-factored |
 | [CyberChef](https://gchq.github.io/CyberChef/) | Encoding/decoding, symmetric crypto |
 | [dcode.fr](https://www.dcode.fr) | Classical ciphers |
