@@ -12,8 +12,8 @@ gambit/
 ├── README.md
 ├── .gitignore
 └── src/
-    ├── main.py   — RSA solver, runs all common attacks automatically
-    └── gen.py   — RSA test case generator, generates values for each attack type
+    ├── rsa_ctf.py   — RSA solver, runs all common attacks automatically
+    └── rsa_gen.py   — RSA test case generator, generates values for each attack type
 ```
 
 ---
@@ -50,7 +50,7 @@ source ~/.bashrc
 Run and follow the menu:
 
 ```bash
-python3 src/rsa_ctf.py
+python3 src/main.py
 ```
 
 **Options:**
@@ -61,19 +61,20 @@ python3 src/rsa_ctf.py
 **Attack order:**
 1. Even prime (`p=2`, checks if N is even)
 2. Small e (cube root, only when `e=3`)
-3. GCD multi-N (shared prime across multiple N values)
-4. Fermat factorization (p and q are close)
-5. Wiener's attack (small d, huge e)
-6. Fallback: factordb lookup hint
-
+3. Hastads broadcast (same message, `e=3`, 3 different N values)
+4. Common modulus (same N, different e values)
+5. GCD multi-N (shared prime across multiple N values)
+6. Fermat factorization (p and q are close)
+7. Wiener's attack (small d, huge e)
+8. Fallback: factordb lookup hint
 ---
 
-### `rsa_gen.py` — Test Case Generator
+### `gen.py` — Test Case Generator
 
 Generates valid RSA values for each attack scenario so you can test the solver or RsaCtfTool:
 
 ```bash
-python3 src/rsa_gen.py
+python3 src/gen.py
 ```
 
 **Scenarios:**
@@ -93,7 +94,7 @@ Each scenario validates your inputs, warns if the attack won't work, and prints 
 
 ```
 given N, e, c
-    └─ python3 src/rsa_ctf.py   → option 1 (auto)
+    └─ python3 src/main.py   → option 1 (auto)
            └─ no result?
                   └─ RsaCtfTool -n N -e e --decrypt c --attack all
                          └─ no result?
@@ -104,11 +105,11 @@ given N, e, c
 
 ## Notes
 
-- **Even prime attack**: RsaCtfTool rejects even N values outright — use `rsa_ctf.py` for this case
+- **Even prime attack**: RsaCtfTool rejects even N values outright — use `main.py` for this case
 - **Wiener's attack**: requires `gmpy2`. Skipped automatically if not installed
 - **Fermat**: capped at 1,000,000 iterations by default — increase `max_iter` in the function if needed
-- **Message size**: when using `rsa_gen.py`, your message must be smaller than N as an integer. Use short messages (`hi`, `flag{x}`) for small test primes
-- **Primality**: `rsa_gen.py` uses Miller-Rabin for primality checks — fast on large numbers. If you input a non-prime, it warns you but doesn't stop
+- **Message size**: when using `gen.py`, your message must be smaller than N as an integer
+- **Primality**: `gen.py` uses Miller-Rabin for primality checks — fast on large numbers
 
 ---
 

@@ -223,7 +223,7 @@ def main():
         print("\n" + "=" * 50)
         print("GAMBIT")
         print("=" * 50)
-        print("1. Run all attacks (auto)")
+        print("1. Run all attacks")
         print("2. Decrypt with known p and q")
         print("3. Hint: look up N on factordb")
         print("q. Quit")
