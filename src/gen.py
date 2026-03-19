@@ -56,9 +56,7 @@ def next_prime(n):
         n += 2
     return n
 
-# ============================================================
-# SCENARIO 1: Even prime (p=2)
-# ============================================================
+# ============================== EVEN PRIME ==============================
 
 def scenario_even_prime():
     print("\n[Even Prime] — p=2, n is even")
@@ -80,9 +78,7 @@ def scenario_even_prime():
     c = encrypt(m, e, n)
     print_output(n, e, c, msg)
 
-# ============================================================
-# SCENARIO 2: Small e (e=3, cube root)
-# ============================================================
+# ============================== SMALL E ==============================
 
 def scenario_small_e():
     print("\n[Small e] — e=3, message is tiny so c = m^3 < n")
@@ -108,7 +104,6 @@ def scenario_small_e():
         return
     c = encrypt(m, e, n)
 
-    # check if cube root attack would work
     if c == pow(m, 3):
         print("  [+] m^3 < n, cube root attack will work directly")
     else:
@@ -116,9 +111,7 @@ def scenario_small_e():
 
     print_output(n, e, c, msg)
 
-# ============================================================
-# SCENARIO 3: Fermat (p and q are close)
-# ============================================================
+# ============================== FERMAT ==============================
 
 def scenario_fermat():
     print("\n[Fermat] — p and q are very close together")
@@ -144,9 +137,7 @@ def scenario_fermat():
     c = encrypt(m, e, n)
     print_output(n, e, c, msg)
 
-# ============================================================
-# SCENARIO 4: Wiener (d is small → e is huge)
-# ============================================================
+# ============================== WIENER ==============================
 
 def scenario_wiener():
     print("\n[Wiener] — d is small, which forces e to be huge")
@@ -160,7 +151,6 @@ def scenario_wiener():
     n = p * q
     phi = (p-1)*(q-1)
 
-    # find a valid small d
     d = get_int("  d (small value, e.g. 3, 5, 7, 11): ")
     if math.gcd(d, phi) != 1:
         print(f"  [!] gcd(d, phi) != 1, d={d} won't work, try another")
@@ -183,9 +173,7 @@ def scenario_wiener():
     c = encrypt(m, e, n)
     print_output(n, e, c, msg)
 
-# ============================================================
-# SCENARIO 5: GCD multi-N (shared prime)
-# ============================================================
+# ============================== GCD MULTI-N ==============================
 
 def scenario_gcd_multi():
     print("\n[GCD Multi-N] — two different n values share a common prime")
@@ -231,9 +219,7 @@ def scenario_gcd_multi():
     print(f"RsaCtfTool -n {n1} -e {e} --decrypt {c1} --attack comfact_cn --attack all")
     print(f"RsaCtfTool -n {n2} -e {e} --decrypt {c2} --attack comfact_cn --attack all")
 
-# ============================================================
-# SCENARIO 6: Hastads broadcast (same m, e=3, 3 different n)
-# ============================================================
+# ============================== HASTADS ==============================
 
 def scenario_hastads():
     print("\n[Hastads Broadcast] — same message encrypted under e=3 with 3 different n values")
@@ -273,9 +259,7 @@ def scenario_hastads():
     print(f"\nRsaCtfTool command:")
     print(f"RsaCtfTool -n {ns[0]},{ns[1]},{ns[2]} -e {e} --decrypt {cs[0]},{cs[1]},{cs[2]} --attack hastads")
 
-# ============================================================
-# SCENARIO 7: Common modulus (same n, same m, different e)
-# ============================================================
+# ============================== COMMON MODULUS ==============================
 
 def scenario_common_modulus():
     print("\n[Common Modulus] — same n and message, encrypted with two different e values")
@@ -309,9 +293,7 @@ def scenario_common_modulus():
     print(f"\nRsaCtfTool command:")
     print(f"RsaCtfTool -n {n} -e {e1},{e2} --decrypt {c1},{c2} --attack common_modulus_related_message")
 
-# ============================================================
-# MAIN MENU
-# ============================================================
+# ============================== MAIN MENU ==============================
 
 MENU = {
     "1": ("Even prime (p=2)",              scenario_even_prime),
