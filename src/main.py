@@ -27,9 +27,17 @@ def decrypt(p, q, e, c, N, label=""):
 def int_cbrt(n):
     if n < 0:
         return -int_cbrt(-n)
+    if n == 0:
+        return 0
     x = int(round(n ** (1/3)))
-    for i in [x-2, x-1, x, x+1, x+2]:
-        if i**3 == n:
+    x = max(x, 1)
+    while True:
+        x1 = (2 * x + n // (x * x)) // 3
+        if x1 >= x:
+            break
+        x = x1
+    for i in [x-1, x, x+1]:
+        if i > 0 and i**3 == n:
             return i
     return None
 
@@ -112,7 +120,7 @@ def hint_factordb(N):
 
 def attack_wiener(N, e, c):
     print("\n[*] Trying: Wiener's attack (large e)")
-    if e < N ** 0.25:
+    if e < math.isqrt(math.isqrt(N)):
         print("[-] e is not large enough for Wiener, skip")
         return None
     try:
