@@ -157,7 +157,7 @@ def scenario_wiener():
         return
 
     e = pow(d, -1, phi)
-    threshold = int((1/3) * n**0.25)
+    threshold = math.isqrt(math.isqrt(n)) // 3
     print(f"  [*] e = {e}")
     print(f"  [*] Wiener threshold: d < {threshold}")
     if d < threshold:
