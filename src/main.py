@@ -1,6 +1,7 @@
 import math
 import os
 import re
+import collections
 
 # ANSI Color Codes for UI
 class C:
@@ -112,24 +113,24 @@ def decrypt(p, q, e, c, N, label=""):
         Win.text(f"{C.ERR}  [-] Decrypt failed ({label}): {ex}{C.RST}")
         return None
 
-def int_cbrt(n):
-    if n < 0: return -int_cbrt(-n)
-    if n == 0: return 0
-    try:
-        from gmpy2 import iroot
-        root, exact = iroot(n, 3)
-        return int(root) if exact else None
-    except ImportError:
-        pass
-    x = int(round(n ** (1/3)))
-    x = max(x, 1)
-    while True:
-        x1 = (2 * x + n // (x * x)) // 3
-        if x1 >= x: break
-        x = x1
-    for i in [x-1, x, x+1]:
-        if i > 0 and i**3 == n: return i
-    return None
+def int_nth_root(A, n):
+    """Finds the integer n-th root of A using a fast binary search."""
+    if A < 0: return None
+    if A == 0: return 0
+    
+    high = 1
+    while pow(high, n) < A:
+        high *= 2
+    low = high // 2
+    
+    while low < high:
+        mid = (low + high) // 2
+        if pow(mid, n) < A:
+            low = mid + 1
+        else:
+            high = mid
+            
+    return low if pow(low, n) == A else None
 
 def isqrt_check(n):
     s = math.isqrt(n)
@@ -186,22 +187,26 @@ def attack_fermat(N, e, c, max_iter=1_000_000):
     return None
 
 def attack_small_e(N, e, c):
-    Win.text(f"\n{C.BLU}[*] Trying: Small e cube root (e=3){C.RST}")
-    if e != 3:
-        Win.text(f"{C.WRN}  [-] e={e}, not 3, skip{C.RST}")
-        return None
-    root = int_cbrt(c)
-    if root is not None and pow(root, 3) == c:
+    Win.text(f"\n{C.BLU}[*] Trying: Small e root / Unpadded RSA{C.RST}")
+    
+    if e > 100:
+        Win.text(f"{C.WRN}  [-] e={e} is quite large, but attempting a quick root check...{C.RST}")
+        
+    root = int_nth_root(c, e)
+    
+    if root is not None and pow(root, e) == c:
         try:
             h = hex(root)[2:]
             if len(h) % 2: h = '0' + h
             result = bytes.fromhex(h).decode(errors='replace')
-            Win.text(f"{C.CYN}  [!] Cube root worked (message was tiny){C.RST}")
+            Win.text(f"{C.CYN}  [!] Perfect {e}-th root found! (m^{e} < N){C.RST}")
             Win.text(f"\n{C.GRN}{C.BLD}[+] DECRYPTED (small e): {result}{C.RST}")
             return result
-        except:
+        except Exception as ex:
+            Win.text(f"{C.ERR}  [-] Root found but decode failed: {ex}{C.RST}")
             pass
-    Win.text(f"{C.WRN}  [-] Cube root didn't yield plaintext, skip{C.RST}")
+            
+    Win.text(f"{C.WRN}  [-] Root didn't yield plaintext (likely wrapped modulo N), skip{C.RST}")
     return None
 
 def attack_hastads(Ns, cs, e):
@@ -224,7 +229,7 @@ def attack_hastads(Ns, cs, e):
         c2 * m2 * pow(m2, -1, N2)
     ) % M
 
-    root = int_cbrt(result)
+    root = int_nth_root(result, 3)
     if root is None:
         Win.text(f"{C.WRN}  [-] Cube root failed, skip{C.RST}")
         return None
@@ -398,25 +403,184 @@ def get_inputs():
 
     return N, e, c, MULTI_N, MULTI_C, E_LIST
 
-# ============================== MAIN MENU ==============================
+# ============================== SYMMETRIC CRYPTO ==============================
 
-def main():
+def ask(question, options):
+    Win.top("CHOOSE OPTION")
+    Win.text(f"{C.WRN}{question}{C.RST}")
+    Win.div()
+    for i, opt in enumerate(options):
+        Win.text(f"  {C.CYN}{i+1}.{C.RST} {opt}")
+    Win.text(f"  {C.CYN}q.{C.RST} Back")
+    Win.bot()
+    while True:
+        val = input(f"{C.BLU}▶{C.RST} Choice: ").strip().lower()
+        if val == 'q':
+            return None
+        try:
+            idx = int(val) - 1
+            if 0 <= idx < len(options):
+                return idx
+            print(f"{C.ERR}  [!] Invalid choice{C.RST}")
+        except ValueError:
+            print(f"{C.ERR}  [!] Enter a number{C.RST}")
+
+def generate_ecb_template():
+    Win.top("ECB BYTE-AT-A-TIME")
+    Win.text(f"{C.WRN}Template generation for ECB coming soon...{C.RST}")
+    Win.bot()
+    input(f"\n{C.CYN}Press Enter to return...{C.RST}")
+
+def generate_padding_oracle_template():
+    Win.top("PADDING ORACLE CONFIG")
+    Win.text("Provide the target details to bake into the script.")
+    Win.bot()
+    
+    host = input(f"{C.BLU}▶{C.RST} Target IP/Domain (e.g., 10.10.10.5): ").strip()
+    port = get_int("Target Port (e.g., 1337) = ")
+    cipher_hex = input(f"{C.BLU}▶{C.RST} Target Ciphertext (Hex): ").strip()
+    block_size = get_int("Block Size (default 16) = ", default=16)
+
+    Win.top("GENERATING SCRIPT")
+    Win.text("Writing cbc_padding_oracle.py to current directory...")
+    Win.bot()
+    
+    template = f"""from pwn import *
+import binascii
+import time
+
+# --- TARGET CONFIGURATION ---
+HOST = '{host}'
+PORT = {port}
+CIPHERTEXT_HEX = '{cipher_hex}'
+BLOCK_SIZE = {block_size}
+
+def oracle(ciphertext_bytes):
+    # Connect to the remote server
+    # r = remote(HOST, PORT, level='error')
+    
+    # Send the modified ciphertext (format based on CTF)
+    # r.sendlineafter(b'> ', binascii.hexlify(ciphertext_bytes))
+    
+    # Read the response and check for padding error
+    # response = r.recvall(timeout=1)
+    # r.close()
+    
+    # RETURN TRUE if padding is VALID, FALSE if padding is INVALID
+    # return b"Padding Error" not in response
+    pass
+
+# --- HEAVY CRYPTO LOGIC ---
+def split_blocks(data, size):
+    return [data[i:i+size] for i in range(0, len(data), size)]
+
+def decrypt_block(prev_block, cipher_block):
+    decrypted = bytearray(BLOCK_SIZE)
+    intermediate = bytearray(BLOCK_SIZE)
+    
+    for byte_idx in range(BLOCK_SIZE - 1, -1, -1):
+        padding_val = BLOCK_SIZE - byte_idx
+        
+        # Prepare the malicious previous block
+        malicious_block = bytearray(BLOCK_SIZE)
+        for i in range(byte_idx + 1, BLOCK_SIZE):
+            malicious_block[i] = intermediate[i] ^ padding_val
+            
+        # Bruteforce the current byte
+        valid_byte_found = False
+        for guess in range(256):
+            malicious_block[byte_idx] = guess
+            
+            # Anti-ban safety delay (adjust as needed for CTF rules)
+            time.sleep(0.05)
+            
+            # Ask the oracle if this modified block + target block has valid padding
+            if oracle(malicious_block + cipher_block):
+                intermediate[byte_idx] = guess ^ padding_val
+                decrypted[byte_idx] = intermediate[byte_idx] ^ prev_block[byte_idx]
+                print(f"[+] Found byte {{byte_idx}}: {{chr(decrypted[byte_idx])}}")
+                valid_byte_found = True
+                break
+                
+        if not valid_byte_found:
+            print(f"[-] Failed to find byte at index {{byte_idx}}")
+            return None
+            
+    return decrypted
+
+if __name__ == '__main__':
+    print("[*] Starting CBC Padding Oracle Attack...")
+    target_bytes = bytes.fromhex(CIPHERTEXT_HEX)
+    blocks = split_blocks(target_bytes, BLOCK_SIZE)
+    
+    plaintext = b""
+    for i in range(1, len(blocks)):
+        print(f"[*] Decrypting Block {{i}}...")
+        dec = decrypt_block(blocks[i-1], blocks[i])
+        if dec:
+            plaintext += dec
+        else:
+            print("[-] Decryption aborted.")
+            break
+            
+    print(f"\\n[+] FINAL PLAINTEXT: {{plaintext}}")
+"""
+    try:
+        with open("cbc_padding_oracle.py", "w") as f:
+            f.write(template)
+        Win.text(f"  {C.GRN}[+] cbc_padding_oracle.py written successfully!{C.RST}")
+        Win.text(f"  {C.WRN}[!] Edit the 'oracle()' function inside the script to match the CTF.{C.RST}")
+    except Exception as e:
+        Win.text(f"  {C.ERR}[-] Failed to write file: {e}{C.RST}")
+        
+    Win.bot()
+    input(f"\n{C.CYN}Press Enter to continue...{C.RST}")
+
+def step_symmetric_menu():
     while True:
         clear_screen()
-        Win.top("")
-        print_rainbow_banner(GAMBIT_BANNER)
+        Win.top("SYMMETRIC CRYPTO (AES/DES)")
+        Win.text("What kind of access or vulnerability do you suspect?")
+        Win.bot()
+        
+        choice = ask(
+            "Choose an attack vector:",
+            [
+                "ECB Byte-at-a-Time (I control input, output length changes)",
+                "CBC Padding Oracle (Server returns 'Invalid Padding' errors)",
+                "CBC Bit-Flipping (Change 'user' to 'admin' in a token)"
+            ]
+        )
+        
+        if choice is None:
+            break
+        elif choice == 0:
+            generate_ecb_template()
+        elif choice == 1:
+            generate_padding_oracle_template()
+        elif choice == 2:
+            Win.top("CBC BIT-FLIPPING")
+            Win.text(f"{C.WRN}Template generation coming soon...{C.RST}")
+            Win.bot()
+            input(f"\n{C.CYN}Press Enter to return...{C.RST}")
+
+# ============================== ASYMMETRIC HUB ==============================
+
+def step_rsa_menu():
+    while True:
+        clear_screen()
+        Win.top("RSA / ASYMMETRIC (GAMBIT CORE)")
         Win.div("MENU")
-        Win.text(f"  {C.CYN}1.{C.RST} Run all attacks")
+        Win.text(f"  {C.CYN}1.{C.RST} Run all automated attacks (Fermat, Wiener, Hastads, etc)")
         Win.text(f"  {C.CYN}2.{C.RST} Decrypt with known p and q")
         Win.text(f"  {C.CYN}3.{C.RST} Hint: look up N on factordb")
-        Win.text(f"  {C.CYN}q.{C.RST} Quit")
+        Win.text(f"  {C.CYN}q.{C.RST} Back to Asymmetric menu")
         Win.bot()
 
         choice = input(f"\n{C.BLD}Choice:{C.RST} ").strip().lower()
 
         if choice == "q":
             break
-
         elif choice == "1":
             N, e, c, MULTI_N, MULTI_C, E_LIST = get_inputs()
             clear_screen()
@@ -434,7 +598,7 @@ def main():
                 Win.text(f"\n{C.ERR}[-] No automatic attack worked.{C.RST}")
                 hint_factordb(N)
             Win.bot()
-
+            input(f"\n{C.CYN}Press Enter to return...{C.RST}")
         elif choice == "2":
             Win.top("DATA INPUT")
             Win.text("Provide standard parameters.")
@@ -443,7 +607,7 @@ def main():
             e = get_int("e (default 65537) = ", default=65537)
             c = get_int("c = ")
             decrypt_known(e, c, N)
-
+            input(f"\n{C.CYN}Press Enter to return...{C.RST}")
         elif choice == "3":
             Win.top("DATA INPUT")
             Win.text("Provide modulus N.")
@@ -452,11 +616,449 @@ def main():
             Win.top("HINT")
             hint_factordb(N)
             Win.bot()
-
+            input(f"\n{C.CYN}Press Enter to return...{C.RST}")
         else:
             print(f"{C.ERR}  [!] Invalid choice{C.RST}")
 
-        input(f"\n{C.CYN}Press Enter to return to menu...{C.RST}")
+def step_asymmetric_menu():
+    while True:
+        clear_screen()
+        Win.top("ASYMMETRIC CRYPTOGRAPHY")
+        Win.div("DOMAINS")
+        Win.text(f"  {C.CYN}1.{C.RST} RSA (Factoring, Wiener, Hastads, etc.)")
+        Win.text(f"  {C.CYN}2.{C.RST} Elliptic Curve (ECC) - Invalid Curve, Nonce Reuse")
+        Win.text(f"  {C.CYN}3.{C.RST} Diffie-Hellman / ElGamal (Discrete Log, Smooth Primes)")
+        Win.bot()
+        
+        choice = ask("Select a target system:", ["RSA", "ECC", "Diffie-Hellman / ElGamal"])
+        if choice is None:
+            break
+        elif choice == 0:
+            step_rsa_menu() # Now correctly routes to the RSA hub above
+        elif choice == 1:
+            Win.top("ECC TEMPLATES")
+            Win.text(f"{C.WRN}Note: ECC is best solved using SageMath, not standard Python.{C.RST}")
+            Win.bot()
+            input(f"\n{C.CYN}Press Enter to return...{C.RST}")
+        elif choice == 2:
+            Win.top("DH / ELGAMAL")
+            Win.text(f"{C.WRN}Template generation coming soon...{C.RST}")
+            Win.bot()
+            input(f"\n{C.CYN}Press Enter to return...{C.RST}")
+
+def score_text(text):
+    """Scores a string based on English character frequencies."""
+    english_freq = {
+        'a': 0.08167, 'b': 0.01492, 'c': 0.02782, 'd': 0.04253,
+        'e': 0.12702, 'f': 0.02228, 'g': 0.02015, 'h': 0.06094,
+        'i': 0.06966, 'j': 0.00015, 'k': 0.00772, 'l': 0.04025,
+        'm': 0.02406, 'n': 0.06749, 'o': 0.07507, 'p': 0.01929,
+        'q': 0.00095, 'r': 0.05987, 's': 0.06327, 't': 0.09056,
+        'u': 0.02758, 'v': 0.00978, 'w': 0.02360, 'x': 0.00150,
+        'y': 0.01974, 'z': 0.00074, ' ': 0.13000
+    }
+    score = 0
+    for char in text.lower():
+        if char in english_freq:
+            score += english_freq[char]
+    return score
+
+def attack_single_byte_xor():
+    Win.top("SINGLE-BYTE XOR BRUTEFORCE")
+    Win.text("Attempts all 256 possible byte keys and ranks them by English frequency.")
+    Win.bot()
+    
+    ct_hex = input(f"{C.BLU}▶{C.RST} Ciphertext (Hex): ").strip()
+    try:
+        ct_bytes = bytes.fromhex(ct_hex)
+    except ValueError:
+        print(f"{C.ERR}  [!] Invalid hex string.{C.RST}")
+        input(f"\n{C.CYN}Press Enter to return...{C.RST}")
+        return
+
+    results = []
+    for key in range(256):
+        decrypted = bytes([b ^ key for b in ct_bytes])
+        try:
+            dec_str = decrypted.decode('ascii')
+            score = score_text(dec_str)
+            results.append((score, key, dec_str))
+        except UnicodeDecodeError:
+            continue # Skip garbage bytes that aren't valid ASCII
+
+    results.sort(reverse=True, key=lambda x: x[0])
+
+    Win.top("TOP 5 LIKELY RESULTS")
+    if not results:
+        Win.text(f"{C.ERR}[-] No valid ASCII outputs found.{C.RST}")
+    else:
+        for i in range(min(5, len(results))):
+            score, key, text = results[i]
+            Win.text(f"  {C.CYN}Key: 0x{key:02x}{C.RST} | {C.GRN}{text[:60]}{'...' if len(text)>60 else ''}{C.RST}")
+    Win.bot()
+    input(f"\n{C.CYN}Press Enter to return...{C.RST}")
+
+def attack_crib_drag():
+    Win.top("XOR CRIB DRAGGING")
+    Win.text("Slides a known plaintext (crib) across the ciphertext.")
+    Win.text("Useful for Many-Time Pad / Nonce Reuse attacks.")
+    Win.bot()
+    
+    ct_hex = input(f"{C.BLU}▶{C.RST} Ciphertext (Hex): ").strip()
+    crib_str = input(f"{C.BLU}▶{C.RST} Crib (Known Plaintext): ").strip()
+    
+    try:
+        ct_bytes = bytes.fromhex(ct_hex)
+        crib_bytes = crib_str.encode('ascii')
+    except ValueError:
+        print(f"{C.ERR}  [!] Invalid input formats.{C.RST}")
+        input(f"\n{C.CYN}Press Enter to return...{C.RST}")
+        return
+
+    if len(crib_bytes) > len(ct_bytes):
+        print(f"{C.ERR}  [!] Crib cannot be longer than the ciphertext.{C.RST}")
+        input(f"\n{C.CYN}Press Enter to return...{C.RST}")
+        return
+
+    Win.top("CRIB DRAG RESULTS")
+    Win.text("Showing printable results where the XOR yields valid ASCII:")
+    Win.div()
+    
+    found_any = False
+    for i in range(len(ct_bytes) - len(crib_bytes) + 1):
+        ct_slice = ct_bytes[i:i+len(crib_bytes)]
+        xored = bytes([a ^ b for a, b in zip(ct_slice, crib_bytes)])
+        
+        # Check if the result is mostly printable
+        if all(32 <= b <= 126 for b in xored):
+            Win.text(f"  {C.CYN}Pos {i:02d}:{C.RST} {C.GRN}{xored.decode('ascii')}{C.RST}")
+            found_any = True
+
+    if not found_any:
+         Win.text(f"  {C.WRN}No fully printable ASCII blocks found during drag.{C.RST}")
+            
+    Win.bot()
+    input(f"\n{C.CYN}Press Enter to return...{C.RST}")
+
+# ============================== STREAM CIPHER ==============================
+
+def step_stream_menu():
+    while True:
+        clear_screen()
+        Win.top("STREAM CIPHERS & XOR")
+        Win.text("Stream ciphers (including CTR mode) are basically complex XOR.")
+        Win.bot()
+        
+        Win.top("CHOOSE OPTION")
+        Win.text("Select an attack vector:")
+        Win.div()
+        Win.text(f"  {C.CYN}1.{C.RST} XOR: Single-byte bruteforce")
+        Win.text(f"  {C.CYN}2.{C.RST} XOR: Crib Dragging (Known Plaintext)")
+        Win.text(f"  {C.CYN}3.{C.RST} AES-CTR / ChaCha20: Nonce Reuse (Turns into XOR)")
+        Win.text(f"  {C.CYN}4.{C.RST} AES-CTR / ChaCha20: Bit-flipping")
+        Win.text(f"  {C.CYN}q.{C.RST} Back")
+        Win.bot()
+        
+        choice = input(f"\n{C.BLD}Choice:{C.RST} ").strip().lower()
+        if choice == 'q': 
+            break
+        elif choice == '1':
+            attack_single_byte_xor()
+        elif choice == '2':
+            attack_crib_drag()
+        elif choice in ['3', '4']:
+            Win.top("ADVANCED STREAM CIPHERS")
+            Win.text(f"{C.WRN}Note: Nonce reuse and bit-flipping rely heavily on the exact{C.RST}")
+            Win.text(f"{C.WRN}structure of the CTF challenge (JSON, cookies, etc).{C.RST}")
+            Win.text("Use the Crib Drag tool above to extract keys if nonce is reused.")
+            Win.bot()
+            input(f"\n{C.CYN}Press Enter to return...{C.RST}")
+        else:
+            print(f"{C.ERR}  [!] Invalid choice{C.RST}")
+
+# ============================== CLASSICAL ==============================
+
+def calculate_ioc(text):
+    """Calculates the Index of Coincidence to predict cipher family."""
+    alpha_ct = ''.join(c for c in text if c.isalpha()).upper()
+    n = len(alpha_ct)
+    if n <= 1: return 0, 0
+    counts = collections.Counter(alpha_ct).values()
+    ioc = sum(c * (c - 1) for c in counts) / (n * (n - 1))
+    return ioc, n
+
+def identify_classical():
+    Win.top("CLASSICAL IDENTIFIER (RANKED)")
+    Win.text("Analyzes mathematical frequency to predict the cipher type.")
+    Win.bot()
+    
+    ct = input(f"{C.BLU}▶{C.RST} Ciphertext: ").strip()
+    if not ct: return
+    
+    ioc, n = calculate_ioc(ct)
+    if n == 0:
+        Win.text(f"{C.ERR}  [-] No alphabetic characters found.{C.RST}")
+        return
+        
+    Win.top("ANALYSIS RESULTS")
+    Win.text(f"  Length: {n} chars | Calculated IoC: {ioc:.4f}")
+    Win.div("LIKELY CIPHERS (RANKED)")
+    
+    if ioc > 0.060:
+        Win.text(f"  {C.GRN}1. Monoalphabetic (Caesar/ROT/Atbash){C.RST}")
+        Win.text(f"     Single alphabet mapping; highest statistical match.")
+        Win.text(f"  {C.CYN}2. Transposition (Rail Fence/Columnar){C.RST}")
+        Win.text(f"     Order is scrambled but letter frequency remains identical.")
+        Win.text(f"  {C.CYN}3. Affine{C.RST}")
+        Win.text(f"     Linear mathematical substitution (ax + b).")
+    elif ioc < 0.048:
+        Win.text(f"  {C.GRN}1. Polyalphabetic (Vigenère/Beaufort){C.RST}")
+        Win.text(f"     Multiple alphabets used to flatten frequency spikes.")
+        Win.text(f"  {C.CYN}2. Autokey{C.RST}")
+        Win.text(f"     Sophisticated polyalphabetic cipher using message as key.")
+    else:
+        Win.text(f"  {C.GRN}1. Digraph/Matrix (Playfair/Hill){C.RST}")
+        Win.text(f"     Encryption of letter pairs or blocks; typical mid-range IoC.")
+        Win.text(f"  {C.CYN}2. Short Text Variance{C.RST}")
+        Win.text(f"     IoC is less reliable with samples under 50 characters.")
+        
+    Win.bot()
+    input(f"\n{C.CYN}Press Enter to return...{C.RST}")
+
+def solve_caesar():
+    Win.top("CAESAR / ROT BRUTEFORCE")
+    Win.text("Prints all 25 possible shifts.")
+    Win.bot()
+    ct = input(f"{C.BLU}▶{C.RST} Ciphertext: ").strip()
+    if not ct: return
+    Win.top("RESULTS")
+    for shift in range(1, 26):
+        pt = ""
+        for char in ct:
+            if char.isalpha():
+                base = ord('A') if char.isupper() else ord('a')
+                pt += chr((ord(char) - base - shift) % 26 + base)
+            else: pt += char
+        Win.text(f"  {C.CYN}ROT-{shift:<2}{C.RST} : {C.GRN}{pt}{C.RST}")
+    Win.bot()
+    input(f"\n{C.CYN}Press Enter to return...{C.RST}")
+
+def solve_vigenere():
+    Win.top("VIGENÈRE DECRYPT")
+    ct = input(f"{C.BLU}▶{C.RST} Ciphertext: ").strip()
+    key = input(f"{C.BLU}▶{C.RST} Key: ").strip().upper()
+    if not ct or not key: return
+    pt, key_idx = "", 0
+    for char in ct:
+        if char.isalpha():
+            base = ord('A') if char.isupper() else ord('a')
+            shift = ord(key[key_idx % len(key)]) - ord('A')
+            pt += chr((ord(char) - base - shift) % 26 + base)
+            key_idx += 1
+        else: pt += char
+    Win.text(f"  {C.GRN}[+] RESULT: {pt}{C.RST}")
+    Win.bot()
+    input(f"\n{C.CYN}Press Enter to return...{C.RST}")
+
+def solve_atbash():
+    Win.top("ATBASH SOLVER")
+    ct = input(f"{C.BLU}▶{C.RST} Ciphertext: ").strip()
+    pt = "".join(chr(ord('A') + (25 - (ord(c.upper()) - ord('A')))) if c.isalpha() else c for c in ct)
+    Win.text(f"  {C.GRN}[+] RESULT: {pt}{C.RST}")
+    Win.bot()
+    input(f"\n{C.CYN}Press Enter to return...{C.RST}")
+
+def solve_affine():
+    Win.top("AFFINE DECRYPT")
+    ct = input(f"{C.BLU}▶{C.RST} Ciphertext: ").strip().upper()
+    a, b = get_int("Value 'a' (multiplicative): "), get_int("Value 'b' (additive): ")
+    a_inv = next((i for i in range(26) if (a * i) % 26 == 1), -1)
+    if a_inv == -1:
+        Win.text(f"{C.ERR}  [-] 'a'={a} has no modular inverse. Invalid key.{C.RST}")
+        return
+    pt = "".join(chr(((a_inv * ((ord(c) - ord('A')) - b)) % 26) + ord('A')) if c.isalpha() else c for c in ct)
+    Win.text(f"  {C.GRN}[+] RESULT: {pt}{C.RST}")
+    Win.bot()
+    input(f"\n{C.CYN}Press Enter to return...{C.RST}")
+
+def solve_playfair():
+    Win.top("PLAYFAIR DECRYPT")
+    ct = input(f"{C.BLU}▶{C.RST} Ciphertext: ").strip().upper().replace('J', 'I')
+    ct = ''.join(filter(str.isalpha, ct))
+    key = input(f"{C.BLU}▶{C.RST} Key: ").strip().upper().replace('J', 'I')
+    if not ct or len(ct) % 2 != 0:
+        Win.text(f"{C.ERR}  [-] Ciphertext must be even length.{C.RST}")
+        return
+    alphabet = "ABCDEFGHIKLMNOPQRSTUVWXYZ"
+    m_str = "".join(collections.OrderedDict.fromkeys(key + alphabet))
+    matrix = [list(m_str[i:i+5]) for i in range(0, 25, 5)]
+    def get_pos(char):
+        for r in range(5):
+            for c in range(5):
+                if matrix[r][c] == char: return r, c
+    pt = ""
+    for i in range(0, len(ct), 2):
+        r1, c1 = get_pos(ct[i])
+        r2, c2 = get_pos(ct[i+1])
+        if r1 == r2: pt += matrix[r1][(c1-1)%5] + matrix[r2][(c2-1)%5]
+        elif c1 == c2: pt += matrix[(r1-1)%5][c1] + matrix[(r2-1)%5][c2]
+        else: pt += matrix[r1][c2] + matrix[r2][c1]
+    Win.text(f"  {C.GRN}[+] RESULT: {pt}{C.RST}")
+    Win.bot()
+    input(f"\n{C.CYN}Press Enter...{C.RST}")
+
+def solve_hill_2x2():
+    Win.top("HILL CIPHER (2x2)")
+    ct = input(f"{C.BLU}▶{C.RST} Ciphertext: ").strip().upper()
+    a, b, c, d = get_int("M[0,0]: "), get_int("M[0,1]: "), get_int("M[1,0]: "), get_int("M[1,1]: ")
+    det = (a * d - b * c) % 26
+    det_inv = next((i for i in range(26) if (det * i) % 26 == 1), -1)
+    if det_inv == -1:
+        Win.text(f"{C.ERR}  [-] Determinant {det} is not invertible.{C.RST}")
+        return
+    ka, kb, kc, kd = (d*det_inv)%26, (-b*det_inv)%26, (-c*det_inv)%26, (a*det_inv)%26
+    pt = ""
+    for i in range(0, len(ct), 2):
+        v1, v2 = ord(ct[i]) - ord('A'), ord(ct[i+1]) - ord('A')
+        pt += chr((ka * v1 + kb * v2) % 26 + ord('A'))
+        pt += chr((kc * v1 + kd * v2) % 26 + ord('A'))
+    Win.text(f"  {C.GRN}[+] RESULT: {pt}{C.RST}")
+    Win.bot()
+    input(f"\n{C.CYN}Press Enter...{C.RST}")
+
+def solve_hill_3x3():
+    Win.top("HILL CIPHER (3x3)")
+    ct = input(f"{C.BLU}▶{C.RST} Ciphertext: ").strip().upper()
+    m = [[get_int(f"M[{i},{j}]: ") for j in range(3)] for i in range(3)]
+    det = (m[0][0]*(m[1][1]*m[2][2]-m[1][2]*m[2][1]) - m[0][1]*(m[1][0]*m[2][2]-m[1][2]*m[2][0]) + m[0][2]*(m[1][0]*m[2][1]-m[1][1]*m[2][0])) % 26
+    det_inv = next((i for i in range(26) if (det * i) % 26 == 1), -1)
+    if det_inv == -1:
+        Win.text(f"{C.ERR}  [-] Determinant {det} is not invertible.{C.RST}")
+        return
+    def get_minor(r, c):
+        items = [m[i][j] for i in range(3) for j in range(3) if i != r and j != c]
+        return (items[0]*items[3] - items[1]*items[2])
+    inv_m = [[0]*3 for _ in range(3)]
+    for r in range(3):
+        for c in range(3):
+            sign = 1 if (r + c) % 2 == 0 else -1
+            inv_m[c][r] = (sign * get_minor(r, c) * det_inv) % 26
+    pt = ""
+    for i in range(0, len(ct), 3):
+        v = [ord(ct[i+j]) - ord('A') for j in range(3)]
+        for r in range(3):
+            pt += chr(sum(inv_m[r][k] * v[k] for k in range(3)) % 26 + ord('A'))
+    Win.text(f"  {C.GRN}[+] RESULT: {pt}{C.RST}")
+    Win.bot()
+    input(f"\n{C.CYN}Press Enter...{C.RST}")
+
+def solve_railfence():
+    Win.top("RAIL FENCE DECRYPT")
+    ct = input(f"{C.BLU}▶{C.RST} Ciphertext: ").strip()
+    rails = get_int("Rails: ")
+    fence = [['\n' for _ in range(len(ct))] for _ in range(rails)]
+    rail, direction = 0, 1
+    for i in range(len(ct)):
+        fence[rail][i] = '*'
+        rail += direction
+        if rail == 0 or rail == rails - 1: direction *= -1
+    idx = 0
+    for r in range(rails):
+        for c in range(len(ct)):
+            if fence[r][c] == '*':
+                fence[r][c], idx = ct[idx], idx + 1
+    pt, rail, direction = "", 0, 1
+    for i in range(len(ct)):
+        pt += fence[rail][i]
+        rail += direction
+        if rail == 0 or rail == rails - 1: direction *= -1
+    Win.text(f"  {C.GRN}[+] RESULT: {pt}{C.RST}")
+    Win.bot()
+    input(f"\n{C.CYN}Press Enter...{C.RST}")
+
+def solve_columnar():
+    Win.top("COLUMNAR TRANSPOSITION")
+    ct = input(f"{C.BLU}▶{C.RST} Ciphertext: ").strip()
+    key = input(f"{C.BLU}▶{C.RST} Key: ").strip()
+    col_len, row_len = len(key), math.ceil(len(ct) / len(key))
+    key_indices = sorted(range(col_len), key=lambda k: key[k])
+    matrix = [['' for _ in range(col_len)] for _ in range(row_len)]
+    idx = 0
+    for col in key_indices:
+        for row in range(row_len):
+            if idx < len(ct):
+                matrix[row][col], idx = ct[idx], idx + 1
+    pt = "".join("".join(row) for row in matrix)
+    Win.text(f"  {C.GRN}[+] RESULT: {pt}{C.RST}")
+    Win.bot()
+    input(f"\n{C.CYN}Press Enter...{C.RST}")
+
+def step_classical_menu():
+    while True:
+        clear_screen()
+        Win.top("CLASSICAL HUB")
+        Win.text("Letter-level swapping and reordering.")
+        Win.bot()
+
+        Win.top("CHOOSE OPTION")
+        Win.text("Select an action or solver:")
+        Win.div()
+        Win.text(f"  {C.CYN}1.{C.RST} Identify Cipher (Ranked IoC)")
+        Win.text(f"  {C.CYN}2.{C.RST} Caesar / ROT (Bruteforce)")
+        Win.text(f"  {C.CYN}3.{C.RST} Vigenère (Known Key)")
+        Win.text(f"  {C.CYN}4.{C.RST} Atbash / Affine")
+        Win.text(f"  {C.CYN}5.{C.RST} Playfair")
+        Win.text(f"  {C.CYN}6.{C.RST} Hill Cipher (2x2 / 3x3)")
+        Win.text(f"  {C.CYN}7.{C.RST} Transposition (Rail Fence / Columnar)")
+        Win.text(f"  {C.CYN}q.{C.RST} Back")
+        Win.bot()
+        
+        choice = input(f"\n{C.BLD}Choice:{C.RST} ").strip().lower()
+        if choice == 'q': break
+        elif choice == '1': identify_classical()
+        elif choice == '2': solve_caesar()
+        elif choice == '3': solve_vigenere()
+        elif choice == '4':
+            sub = ask("Select Type:", ["Atbash (A=Z)", "Affine (ax + b)"])
+            if sub == 0: solve_atbash()
+            elif sub == 1: solve_affine()
+        elif choice == '5': solve_playfair()
+        elif choice == '6':
+            sub = ask("Dimension:", ["2x2 Matrix", "3x3 Matrix"])
+            if sub == 0: solve_hill_2x2()
+            elif sub == 1: solve_hill_3x3()
+        elif choice == '7':
+            sub = ask("Transposition:", ["Rail Fence (Zigzag)", "Columnar"])
+            if sub == 0: solve_railfence()
+            elif sub == 1: solve_columnar()
+
+# ============================== MAIN MENU ==============================
+
+def main():
+    while True:
+        clear_screen()
+        Win.top("")
+        print_rainbow_banner(GAMBIT_BANNER)
+        Win.div("DOMAINS")
+        Win.text(f"  {C.CYN}1.{C.RST} Asymmetric (RSA, ECC, Diffie-Hellman)")
+        Win.text(f"  {C.CYN}2.{C.RST} Symmetric Block Ciphers (AES ECB/CBC)")
+        Win.text(f"  {C.CYN}3.{C.RST} Symmetric Stream Ciphers (XOR, CTR, ChaCha20)")
+        Win.text(f"  {C.CYN}4.{C.RST} Classical & Matrix (Caesar, Vigenere, Hill, Playfair)")
+        Win.text(f"  {C.CYN}q.{C.RST} Quit")
+        Win.bot()
+
+        choice = input(f"\n{C.BLD}Choice:{C.RST} ").strip().lower()
+
+        if choice == 'q':
+            break
+        elif choice == '1':
+            step_asymmetric_menu()
+        elif choice == '2':
+            step_symmetric_menu()
+        elif choice == '3':
+            step_stream_menu()
+        elif choice == '4':
+            step_classical_menu()
 
 if __name__ == "__main__":
     main()
